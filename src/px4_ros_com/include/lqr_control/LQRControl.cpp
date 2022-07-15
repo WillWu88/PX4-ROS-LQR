@@ -42,39 +42,38 @@
  * @copyright Copyright (c) System Theory Lab, 2022
  *
  */
-#include <LQRControl.hpp>
-#include <mathlib/math/Functions.hpp>
-#include <px4_platform_common/defines.h>
+#include "LQRControl.hpp"
 
-
-matrix::Vector3f LQRControl::convertEigen(const Eigen::Vector3f &eigen_vector)
+LQRControl::LQRControl() :
+	_num_of_output(static_cast<int>(LQR_PARAMS::CONTROL_VECTOR::DIM)),
+	_num_of_states(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::DIM))
 {
-	matrix::Vector3f new_vec;
-	for (int i = 0; i < eigen_vector.size(); i++){
-		new_vec(i) = eigen_vector(i);
-	}
-	return new_vec;
+	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
+	_state = Eigen::VectorXf::Zero(_num_of_states);
 }
 
-Eigen::Vector3f LQRControl::convertPX4Vec(const matrix::Vector3f &px4_vector)
+LQRControl::LQRControl(Eigen::VectorXf state):
+	_num_of_output(static_cast<int>(LQR_PARAMS::CONTROL_VECTOR::DIM)),
+	_num_of_states(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::DIM)),
+	_state(state)
 {
-	Eigen::Vector3f new_vec;
-	for (int i = 0; i < 3; i++){
-		new_vec(i) = px4_vector(i);
-	}
-	return new_vec;
+	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
+	_state = Eigen::VectorXf::Zero(_num_of_states);
 }
 
-Eigen::Quaternionf LQRControl::convertQuatf(const matrix::Quatf &px4_quat)
+LQRControl::LQRControl(int output_num, int stat_num, Eigen::VectorXf state) :
+	_num_of_output(output_num),
+	_num_of_states(stat_num),
+	_state(state)
 {
-	Eigen::Quaternionf new_vec(px4_quat(0), px4_quat(1), px4_quat(2), px4_quat(3));
-	new_vec.normalize();
-	return new_vec;
+	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
+	_state = Eigen::VectorXf::Zero(_num_of_states);
 }
 
 Eigen::Vector3f LQRControl::reduceQuat(const Eigen::Quaternionf &quat_cord)
 {
 	Eigen::Quaternionf new_vec(quat_cord); //check copy constructor
+	new_vec.normalize();
 	Eigen::Vector3f return_vec(new_vec.x(), new_vec.y(), new_vec.z());
 	return return_vec;
 }
@@ -85,52 +84,40 @@ Eigen::Quaternionf LQRControl::quatSubtraction(const Eigen::Quaternionf &a, cons
 	return new_vec;
 }
 
-void LQRControl::setAttitudeSetpoint(const matrix::Quatf &qd, const float yawspeed_setpoint)
+void LQRControl::setLQRGain(const Eigen::MatrixXf &new_k)
 {
-
-	_attitude_setpoint = convertQuatf(qd);
-	_attitude_setpoint.normalize();
-	_yawspeed_setpoint = yawspeed_setpoint;
-}
-
-void LQRControl::adaptAttitudeSetpoint(const matrix::Quatf &q_delta)
-{
-	Eigen::Quaternionf quat_shift = convertQuatf(q_delta);
-	_attitude_setpoint *= quat_shift;
-	_attitude_setpoint.normalize();
-}
-
-void LQRControl::setRateSetpoint(const matrix::Vector3f &new_rate_setpoint)
-{
-	_rate_setpoint = convertPX4Vec(new_rate_setpoint);
-}
-
-void LQRControl::setLQRGain(const Eigen::Matrix<float, 3, 6> &new_k)
-{
-	if (new_k.rows() == _num_of_output && _num_of_states == 6) {
+	if (new_k.rows() == _num_of_output && new_k.cols() == _num_of_states) {
 		_lqr_gain_matrix = new_k;
 	} else {
 		// set gain to 0 if new input doesn't meet the dimension requirement
 		_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
 	}
 }
-Eigen::Matrix<float, 6, 1> LQRControl::constructState(const matrix::Vector3f &rate_state, const matrix::Quatf &q_state)
+
+Eigen::Quaternionf LQRControl::restoreFullQuat(const Eigen::Vector3f &quat)
 {
-	Eigen::Matrix<float, 6, 1> state_vector;
-	state_vector << reduceQuat(quatSubtraction(_attitude_setpoint, convertQuatf(q_state))), _rate_setpoint - convertPX4Vec(rate_state);
-	return state_vector;
+	float q_0 = sqrt(1.0f - quat.norm());
+	Eigen::Quaternionf full_quat = Eigen::Quaternionf(q_0, quat[0], quat[1], quat[2]);
+	return full_quat.normalized();
+}
+
+Eigen::VectorXf LQRControl::calculateError(const Eigen::VectorXf &setpoint)
+{
+	Eigen::Quaternionf quat_state = restoreFullQuat(_state.segment(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
+																		static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3)));
+	Eigen::Quaternionf quat_setpoint = restoreFullQuat(setpoint.segment(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
+																		static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3)));
+	Eigen::Vector3f quat_error_reduced = reduceQuat(quat_state.inverse() * quat_setpoint);
+	Eigen::VectorXf error_vec = setpoint - _state;
+	return
+
+
 }
 
 
-void LQRControl::setSaturationStatus(const matrix::Vector<bool, 3> &saturation_positive,
-				      const matrix::Vector<bool, 3> &saturation_negative)
+Eigen::VectorXf LQRControl::update(const Eigen::VectorXf &setpoint)
 {
-	_control_allocator_saturation_positive = saturation_positive;
-	_control_allocator_saturation_negative = saturation_negative;
-}
+	Eigen::VectorXf error = calculateError(setpoint);
 
-matrix::Vector3f LQRControl::update(const matrix::Quatf &q_state, const matrix::Vector3f &rate_state, const bool landed)
-{
-	Eigen::Vector3f torque = _lqr_gain_matrix * constructState(rate_state, q_state);
-	return convertEigen(torque);
+	return _lqr_gain_matrix * error;
 }

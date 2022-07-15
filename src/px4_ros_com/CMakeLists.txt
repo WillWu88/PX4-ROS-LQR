@@ -88,7 +88,7 @@ target_include_directories(frame_transforms PUBLIC
 target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
 
 # Add lqr_control lib
-add_library(lqr_control SHARED src/lib/LQRControl.hpp src/lib/LQRControl.cpp)
+add_library(lqr_control SHARED include/lqr_control/LQRControl.hpp include/lqr_control/LQRControl.cpp)
 ament_target_dependencies(lqr_control Eigen3)
 target_include_directories(lqr_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
