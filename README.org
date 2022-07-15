@@ -1,0 +1,8 @@
+#+title: Readme
+#+author: Will Wu
+#+email: willwu@wustl.edu
+
+
+This repository houses an offboard PX4 quadcopter LQR controller. The controller is implemented as a ROS package based on the px4-ros bridge.
+
+More documentation to come...
