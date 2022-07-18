@@ -46,12 +46,12 @@
 #include "LQRControl.hpp"
 
 class LQRControlTest : public ::testing::Test {
-    protected:
-        void SetUp() override{
-            controller.setLQRGain(Eigen::MatrixXf::Random(4,12));
-            controller.updateState(Eigen::VectorXf::Random(12,1), 0, 11);
-        }
-        LQRControl controller;
+protected:
+    void SetUp() override{
+        controller.setLQRGain(Eigen::MatrixXf::Random(4,12));
+        controller.updateState(Eigen::VectorXf::Random(12,1), 0, 11);
+    }
+    LQRControl controller;
 };
 
 TEST_F(LQRControlTest, QuaternionManip)
@@ -63,5 +63,14 @@ TEST_F(LQRControlTest, QuaternionManip)
     EXPECT_TRUE(quat_reduced.isApprox(controller.reduceQuat(quat_coord_normalized)));
     EXPECT_TRUE(quat_reduced.isApprox(controller.reduceQuat(quat_coord)));
     EXPECT_EQ(quat_coord_normalized, controller.restoreFullQuat(quat_reduced));
-    EXPECT_TRUE(quat_a.isApprox(controller.restoreFullQuat(controller.reduceQuat(quat_a))));
+    Eigen::Quaternionf quat_a_product = controller.restoreFullQuat(controller.reduceQuat(quat_a));
+    EXPECT_NEAR((quat_a.normalized()).w(), quat_a_product.w(), 1e-2f);
+    EXPECT_NEAR((quat_a.normalized()).x(), quat_a_product.x(), 1e-2f);
+    EXPECT_NEAR((quat_a.normalized()).y(), quat_a_product.y(), 1e-2f);
+    EXPECT_NEAR((quat_a.normalized()).z(), quat_a_product.z(), 1e-2f);
+}
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

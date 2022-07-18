@@ -12,7 +12,7 @@ rtps:
     receive: true
   - msg: OffboardControlMode
     receive: true
-  - msg: SensorOpticalFlow
+  - msg: OpticalFlow
     receive: true
   - msg: PositionSetpoint
     receive: true
@@ -60,3 +60,9 @@ rtps:
     send: true
   - msg: SensorCombined
     send: true
+  - msg: VehicleLocalPosition
+    receive: true
+  - msg: VehicleAttitude
+    receive: true
+  - msg: VehicleAngularVelocity
+    receive: true

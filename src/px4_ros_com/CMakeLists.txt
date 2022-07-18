@@ -117,6 +117,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
   ament_add_gtest_executable(LQRControlTest include/lqr_control/LQRControlTest.cpp)
   ament_target_dependencies(LQRControlTest Eigen3)
+  target_link_libraries(LQRControlTest lqr_control)
 endif()
 ############
 # Install ##

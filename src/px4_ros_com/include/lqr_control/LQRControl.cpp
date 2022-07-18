@@ -90,7 +90,7 @@ void LQRControl::setLQRGain(const Eigen::MatrixXf &new_k)
 
 Eigen::Quaternionf LQRControl::restoreFullQuat(const Eigen::Vector3f &quat)
 {
-	float q_0 = sqrt(1.0f - quat.norm());
+	float q_0 = sqrt(1.0f - quat.norm() * quat.norm());
 	Eigen::Quaternionf full_quat = Eigen::Quaternionf(q_0, quat[0], quat[1], quat[2]);
 	return full_quat.normalized();
 }
