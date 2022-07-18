@@ -51,6 +51,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 #include <eigen3/Eigen/Eigen>
+// #include <lqr_control/LQRControl.hpp>
 
 #include <chrono>
 #include <iostream>

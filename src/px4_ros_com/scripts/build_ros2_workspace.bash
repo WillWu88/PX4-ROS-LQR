@@ -122,6 +122,7 @@ fi
 
 # build px4_ros_com package, except the ros1_bridge
 [ ! -v $verbose ] && colcon_output=$(echo "--event-handlers console_direct+")
+echo $ROS_WS_DIR
 cd $ROS_WS_DIR && colcon build --cmake-args -DCMAKE_BUILD_TYPE=RELWITHDEBINFO -DCMAKE_EXPORT_COMPILE_COMMANDS=1 --symlink-install --packages-skip ros1_bridge $colcon_output
 
 # source the ROS2 workspace environment so to have it ready to use

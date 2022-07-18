@@ -43,84 +43,25 @@
 * */
 
 #include <gtest/gtest.h>
-#include <LQRControl.hpp>
-#include <mathlib/math/Functions.hpp>
+#include "LQRControl.hpp"
 
-TEST(LQRControlTest, QuaternionReduction)
+class LQRControlTest : public ::testing::Test {
+    protected:
+        void SetUp() override{
+            controller.setLQRGain(Eigen::MatrixXf::Random(4,12));
+            controller.updateState(Eigen::VectorXf::Random(12,1), 0, 11);
+        }
+        LQRControl controller;
+};
+
+TEST_F(LQRControlTest, QuaternionManip)
 {
-    LQRControl controller;
     Eigen::Quaternionf quat_coord_normalized(1, 0, 0, 0);
     Eigen::Quaternionf quat_coord(3, 0, 0, 0);
     Eigen::Vector3f quat_reduced(0, 0, 0);
+    Eigen::Quaternionf quat_a(1.5, 3, 4, 6);
     EXPECT_TRUE(quat_reduced.isApprox(controller.reduceQuat(quat_coord_normalized)));
     EXPECT_TRUE(quat_reduced.isApprox(controller.reduceQuat(quat_coord)));
-}
-
-TEST(LQRControlTest, QuaternionSubtraction)
-{
-    LQRControl controller;
-    Eigen::Quaternionf a(0, 1, 0, 0);
-    Eigen::Quaternionf b(3, 0, 0, 0);
-    Eigen::Quaternionf result(-3, 1, 0, 0);
-    EXPECT_TRUE(result.isApprox(controller.quatSubtraction(a, b)));
-}
-TEST(LQRControlTest, LibConversion)
-{
-    LQRControl controller;
-    Eigen::Quaternionf quat_coord(3, 0, 0, 0);
-    matrix::Quatf px4_quat(3, 0, 0, 0);
-    Eigen::Vector3f test_coord(9, 0, 3);
-    matrix::Vector3f test_coord_px4(9, 0, 3);
-
-    for (int i = 0; i < test_coord.size(); i++){
-        EXPECT_NEAR(test_coord(i), controller.convertPX4Vec(test_coord_px4)(i), 1e-3f);
-        EXPECT_NEAR(test_coord_px4(i), controller.convertEigen(test_coord)(i), 1e-3f);
-    }
-
-    Eigen::Quaternionf converted = controller.convertQuatf(px4_quat);
-    quat_coord.normalize();
-    EXPECT_NEAR(quat_coord.w(), converted.w(), 1e-3f);
-    EXPECT_NEAR(quat_coord.x(), converted.x(), 1e-3f);
-    EXPECT_NEAR(quat_coord.y(), converted.y(), 1e-3f);
-    EXPECT_NEAR(quat_coord.z(), converted.z(), 1e-3f);
-}
-
-TEST(LQRControlTest, GainGeneration)
-{
-    LQRControl controller;
-    //set point construction
-    matrix::Quatf attitude_setpoint(1, 0, 0, 0);
-    float yawspeed_setpoint = 0.5f;
-    matrix::Vector3f rate_setpoint(0, 0, 0);
-
-    Eigen::Matrix<float, 3, 6> gain_matrix;
-    gain_matrix << Eigen::Matrix3f::Identity(), Eigen::Matrix3f::Identity();
-
-    EXPECT_EQ(3, gain_matrix.rows());
-    EXPECT_EQ(6, gain_matrix.cols());
-
-    controller.setLQRGain(gain_matrix);
-    controller.setAttitudeSetpoint(attitude_setpoint, yawspeed_setpoint);
-    controller.setRateSetpoint(rate_setpoint);
-
-    //state construction
-    matrix::Quatf q_state(0.0f, 0.65f, 0.0f, -0.75f);
-    matrix::Vector3f rate_state(1, 0, 0);
-    bool landed = false;
-
-    Eigen::Matrix<float, 6, 1> state = controller.constructState(rate_state, q_state);
-    Eigen::Matrix<float, 6, 1> state_actual;
-    state_actual << -0.65f, 0.0f, 0.75f, -1.0f, 0.0f, 0.0f;
-    for (int i = 0; i < state_actual.size(); i++)
-    {
-        EXPECT_NEAR(state_actual(i), state(i), 1e-2f);
-    }
-
-    matrix::Vector3f torque = controller.update(q_state, rate_state, landed);
-
-    matrix::Vector3f target_torque(-1.65f, 0.0f, 0.75f);
-
-    for (int i = 0; i < 3; i++){
-        EXPECT_NEAR(target_torque(i), torque(i), 1e-2f);
-    }
+    EXPECT_EQ(quat_coord_normalized, controller.restoreFullQuat(quat_reduced));
+    EXPECT_TRUE(quat_a.isApprox(controller.restoreFullQuat(controller.reduceQuat(quat_a))));
 }

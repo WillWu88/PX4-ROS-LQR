@@ -110,6 +110,14 @@ custom_executable(examples/advertisers debug_vect_advertiser)
 custom_executable(examples/offboard offboard_control)
 custom_executable(offboard_lqr lqr_controller)
 
+# Add LQR Gtest
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+  ament_add_gtest_executable(LQRControlTest include/lqr_control/LQRControlTest.cpp)
+  ament_target_dependencies(LQRControlTest Eigen3)
+endif()
 ############
 # Install ##
 ############

@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <Eigen/Eigen>
+#include <eigen3/Eigen/Eigen>
 #include "params.hpp"
 
 class LQRControl
@@ -29,13 +29,6 @@ public:
 	Eigen::Vector3f reduceQuat(const Eigen::Quaternionf &quat_cord);
 
 	/**
-	 * Quaternion subtraction for Eigen
-	 * @param quaternion a
-	 * @param quaternion b
-	 */
-	Eigen::Quaternionf quatSubtraction(const Eigen::Quaternionf &a, const Eigen::Quaternionf &b);
-
-	/**
 	 * Set new lqr gain matrix (3x6), assume externally calculated gain
 	 * @param new_k new gain matrix
 	 */
@@ -43,12 +36,21 @@ public:
 
 	/**
 	 * Restore unit quaternion based on q1, q2, q3 (assume that order)
-	 * @param quat vector that contains q1, q2 q3 (in that order))
+	 * @param quat: vector that contains q1, q2 q3 (in that order))
 	 */
 	Eigen::Quaternionf restoreFullQuat(const Eigen::Vector3f &quat);
 
 	int returnOutputWidth() {return _num_of_output;}
 	int returnStateWidth() {return _num_of_states;}
+
+
+	/**
+	 * Update state variable, can be partial given the index
+	 * @param new_val: new vector to override the old one
+	 * @param start: starting index of subvector
+	 * @param end: ending index of subvector
+	 * @return integer that denotes the state of execution */
+	int updateState(const Eigen::VectorXf &new_val, int start, int end);
 
 	/**
 	 * Calculate error vector, notice quaternion way of calculating error
@@ -64,6 +66,12 @@ public:
 	 * @return [-1,1] normalized torque vector to apply to the vehicle
 	 */
 	Eigen::VectorXf update(const Eigen::VectorXf &setpoint);
+
+	Eigen::VectorXf returnState();
+
+	Eigen::MatrixXf checkGain();
+
+
 
 private:
 	const int _num_of_output;
