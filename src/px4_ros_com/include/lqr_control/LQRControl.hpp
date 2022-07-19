@@ -53,6 +53,14 @@ public:
 	int updateState(const Eigen::VectorXf &new_val, int start, int end);
 
 	/**
+	 * Update setpoint variable, can be partial given the index
+	 * @param new_val: new vector to override the old one
+	 * @param start: starting index of subvector
+	 * @param end: ending index of subvector
+	 * @return integer that denotes the state of execution */
+	int updateSetpoint(const Eigen::VectorXf &new_val, int start, int end);
+
+	/**
 	 * Calculate error vector, notice quaternion way of calculating error
 	 * @param setpoint vector */
 	Eigen::VectorXf calculateError (const Eigen::VectorXf &setpoint);
@@ -65,7 +73,7 @@ public:
 	 * @warning need to implement landing logic
 	 * @return [-1,1] normalized torque vector to apply to the vehicle
 	 */
-	Eigen::VectorXf update(const Eigen::VectorXf &setpoint);
+	Eigen::VectorXf update();
 
 	Eigen::VectorXf returnState();
 
@@ -78,5 +86,6 @@ private:
 	const int _num_of_states;
 	Eigen::MatrixXf _lqr_gain_matrix;
 	Eigen::VectorXf _state;
+	Eigen::VectorXf _setpoint;
 
 };

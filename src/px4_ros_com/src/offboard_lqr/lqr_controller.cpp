@@ -51,6 +51,8 @@
 #include <px4_msgs/msg/vehicle_angular_velocity.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_attitude.hpp>
+#include <px4_msgs/msg/actuator_controls.hpp>
+#include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 #include <eigen3/Eigen/Eigen>
@@ -69,15 +71,15 @@ public:
 #ifdef ROS_DEFAULT_API
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in", 10);
-		trajectory_setpoint_publisher_ =
-			this->create_publisher<TrajectorySetpoint>("fmu/trajectory_setpoint/in", 10);
+		actuator_command_publisher_ =
+			this->create_publisher<ActuatorControls>("fmu/actuator_controls_0/in", 10);
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in", 10);
 #else
 		offboard_control_mode_publisher_ =
 			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in");
-		trajectory_setpoint_publisher_ =
-			this->create_publisher<TrajectorySetpoint>("fmu/trajectory_setpoint/in");
+		actuator_command_publisher_ =
+			this->create_publisher<ActuatorControls0>("fmu/actuator_controls_0/in");
 		vehicle_command_publisher_ =
 			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in");
 #endif
@@ -86,8 +88,51 @@ public:
 		timesync_sub_ =
 			this->create_subscription<px4_msgs::msg::Timesync>("fmu/timesync/out", 10,
 				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
-					timestamp_.store(msg->timestamp);
+					times_tamp_.store(msg->timestamp);
 				});
+
+		// update vehicle state once an update becomes available
+		vehicle_pos_vel_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
+			"fmu/vehicle_local_position/out",
+			10,
+			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
+				Eigen::VectorXf new_state;
+				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
+				controller_.updateState(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
+			});
+		vehicle_attitude_sub_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
+			"fmu/vehicle_attitude/out",
+			10,
+			[this](const px4_msgs::msg::VehicleAttitude::UniquePtr msg) {
+				Eigen::Quaternionf new_state(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
+				controller_.updateState(controller_.reduceQuat(new_state),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3));
+			});
+		vehicle_angular_v_sub_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+			"fmu/vehicle_angular_velocity/out",
+			10,
+			[this](const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg) {
+				Eigen::VectorXf new_state(msg->xyz.size());
+				new_state << msg->xyz[0], msg->xyz[1], msg->xyz[2];
+				controller_.updateState(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::R));
+			});
+
+        // update vehicle position setpoint, from qgroundcontrol
+        vehicle_trajectory_sub_ = this->create_subscription<px4_msgs::msg::TrajectorySetpoint>(
+			"fmu/trajectory_setpoint/out",
+			10,
+			[this](const px4_msgs::msg::TrajectorySetpoint::UniquePtr msg) {
+				Eigen::VectorXf new_state(msg->position.size());
+				new_state << msg->position[0], msg->position[1], msg->position[2];
+				controller_.updateSetpoint(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_Z));
+			});
 
 		offboard_setpoint_counter_ = 0;
 
@@ -103,39 +148,41 @@ public:
 
             		// offboard_control_mode needs to be paired with trajectory_setpoint
 			publish_offboard_control_mode();
-			publish_trajectory_setpoint();
+			publish_control_setpoint();
 
            		 // stop the counter after reaching 11
 			if (offboard_setpoint_counter_ < 11) {
 				offboard_setpoint_counter_++;
 			}
 		};
-		timer_ = this->create_wall_timer(100ms, timer_callback);
+		timer_ = this->create_wall_timer(5ms, timer_callback); //update control at 200Hz
 	}
 
 	void arm() const;
 	void disarm() const;
 
 private:
-	LQRControl controller;
+	LQRControl controller_;
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
-	rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_publisher_;
 	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
+	rclcpp::Publisher<ActuatorControls>::SharedPtr actuator_command_publisher_;
+
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr vehicle_pos_vel_sub_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleAttitude>::SharedPtr vehicle_attitude_sub_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleAngularVelocity>::SharedPtr vehicle_angular_v_sub_;
+	rclcpp::Subscription<px4_msgs::msg::TrajectorySetpoint>::SharedPtr vehicle_trajectory_sub_;
 
 	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
 	void publish_offboard_control_mode() const;
-	void publish_trajectory_setpoint() const;
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0,
 				     float param2 = 0.0) const;
+	void publish_control_setpoint();
 };
 
 /**
@@ -174,17 +221,18 @@ void OffboardLQR::publish_offboard_control_mode() const {
 
 
 /**
- * @brief Publish a trajectory setpoint
- *        For this example, it sends a trajectory setpoint to make the
- *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
+ * @brief Publish Commanded Wrench Calculated by Controller
  */
-void OffboardLQR::publish_trajectory_setpoint() const {
-	TrajectorySetpoint msg{};
+void OffboardLQR::publish_control_setpoint() {
+	Eigen::VectorXf control_val = controller_.update();
+	ActuatorControls msg{}; //needs review
 	msg.timestamp = timestamp_.load();
-	msg.position = {0.0, 0.0, -5.0};
-	msg.yaw = -3.14; // [-PI:PI]
+	msg.control[msg.INDEX_ROLL] = control_val(LQR_PARAMS::CONTROL_VECTOR::AILERON);
+	msg.control[msg.INDEX_PITCH] = control_val(LQR_PARAMS::CONTROL_VECTOR::ELEVATOR);
+	msg.control[msg.INDEX_YAW] = control_val(LQR_PARAMS::CONTROL_VECTOR::RUDDER);
+	msg.control[msg.INDEX_THROTTLE] = control_val(LQR_PARAMS::CONTROL_VECTOR::THRUST);
 
-	trajectory_setpoint_publisher_->publish(msg);
+	actuator_command_publisher_->publish(msg);
 }
 
 /**
