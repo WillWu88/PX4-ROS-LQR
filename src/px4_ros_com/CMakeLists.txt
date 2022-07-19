@@ -17,7 +17,7 @@ include(EnableSanitizers)
 # Required since
 #   - "create_subscription()" and "create_publisher()" APIs changed
 #   - eigen3_cmake_module is only available in these distros
-list(APPEND ROS_DISTROS "dashing" "eloquent" "foxy" "galactic" "rolling")
+list(APPEND ROS_DISTROS "dashing" "eloquent" "foxy" "galactic" "rolling" "humble")
 set(ROS_DISTRO)
 if(DEFINED ENV{ROS2_DISTRO})
   set(ROS_DISTRO $ENV{ROS2_DISTRO})
@@ -57,6 +57,7 @@ find_package(Eigen3 REQUIRED NO_MODULE)
 # Generate micro-RTPS agent code ##
 ###################################
 
+message("Generating Micro-RTPS code")
 get_filename_component(PX4_MSGS_DIR "../" ABSOLUTE BASE_DIR ${px4_msgs_DIR})
 set(MSGS_DIR "${PX4_MSGS_DIR}/msg" CACHE INTERNAL "MSGS_DIR")
 include(GenerateMicroRTPSAgent)
@@ -99,6 +100,7 @@ target_link_libraries(lqr_control Eigen3::Eigen)
 
 
 # Add microRTPS agent
+message("Adding MicroRTPS agent code")
 add_executable(micrortps_agent ${MICRORTPS_AGENT_FILES})
 ament_target_dependencies(micrortps_agent fastcdr fastrtps rclcpp)
 target_link_libraries(micrortps_agent fastcdr fastrtps ${rclcpp_LIBRARIES})
@@ -157,6 +159,7 @@ install(TARGETS frame_transforms
         RUNTIME DESTINATION bin
         INCLUDES DESTINATION include
 )
+message("Installing microRTPS agent")
 install(TARGETS micrortps_agent
         ARCHIVE DESTINATION lib/${PROJECT_NAME}
         LIBRARY DESTINATION lib/${PROJECT_NAME}
