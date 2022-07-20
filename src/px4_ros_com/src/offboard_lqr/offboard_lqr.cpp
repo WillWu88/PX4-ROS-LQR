@@ -63,25 +63,24 @@
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
-using namespace px4_msgs::msg;
 
 class OffboardLQR: public rclcpp::Node {
 public:
 	OffboardLQR() : Node("offboard_lqr_controller") {
 #ifdef ROS_DEFAULT_API
 		offboard_control_mode_publisher_ =
-			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in", 10);
+			this->create_publisher<px4_msgs::msg::OffboardControlMode>("fmu/offboard_control_mode/in", 10);
 		actuator_command_publisher_ =
-			this->create_publisher<ActuatorControls>("fmu/actuator_controls_0/in", 10);
+			this->create_publisher<px4_msgs::msg::ActuatorControls>("fmu/actuator_controls_0/in", 10);
 		vehicle_command_publisher_ =
-			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in", 10);
+			this->create_publisher<px4_msgs::msg::VehicleCommand>("fmu/vehicle_command/in", 10);
 #else
 		offboard_control_mode_publisher_ =
-			this->create_publisher<OffboardControlMode>("fmu/offboard_control_mode/in");
+			this->create_publisher<px4_msgs::msg::OffboardControlMode>("fmu/offboard_control_mode/in");
 		actuator_command_publisher_ =
-			this->create_publisher<ActuatorControls0>("fmu/actuator_controls_0/in");
+			this->create_publisher<px4_msgs::msg::ActuatorControls0>("fmu/actuator_controls_0/in");
 		vehicle_command_publisher_ =
-			this->create_publisher<VehicleCommand>("fmu/vehicle_command/in");
+			this->create_publisher<px4_msgs::msg::VehicleCommand>("fmu/vehicle_command/in");
 #endif
 
 		// get common timestamp
@@ -148,7 +147,7 @@ public:
 
             		// offboard_control_mode needs to be paired with trajectory_setpoint
 			publish_offboard_control_mode();
-			publish_control_setpoint();
+			publish_control_setpoint_test();
 
            		 // stop the counter after reaching 11
 			if (offboard_setpoint_counter_ < 11) {
@@ -183,6 +182,7 @@ private:
 	void publish_vehicle_command(uint16_t command, float param1 = 0.0,
 				     float param2 = 0.0) const;
 	void publish_control_setpoint();
+	void publish_control_setpoint_test();
 };
 
 /**
@@ -255,6 +255,19 @@ void OffboardLQR::publish_vehicle_command(uint16_t command, float param1,
 	msg.from_external = true;
 
 	vehicle_command_publisher_->publish(msg);
+}
+
+void OffboardLQR::publish_control_setpoint_test()
+{
+	ActuatorControls msg{}; //needs review
+	msg.timestamp = timestamp_.load();
+	msg.control[msg.INDEX_ROLL] = 0;
+	msg.control[msg.INDEX_PITCH] = 0;
+	msg.control[msg.INDEX_YAW] = 0;
+	msg.control[msg.INDEX_THROTTLE] = 1;
+
+	actuator_command_publisher_->publish(msg);
+
 }
 
 int main(int argc, char* argv[]) {

@@ -8,6 +8,7 @@
  */
 
 #pragma once
+#include <Eigen/Eigen>
 
 namespace LQR_PARAMS
 {
@@ -17,4 +18,5 @@ namespace LQR_PARAMS
 
     //no need for scoped cuz format remains the same
     enum CONTROL_VECTOR{THRUST, AILERON, ELEVATOR, RUDDER, DIM};
+    extern Eigen::VectorXf EQ_INPUT;
 }

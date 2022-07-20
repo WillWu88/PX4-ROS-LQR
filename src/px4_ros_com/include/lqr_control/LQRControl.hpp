@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <eigen3/Eigen/Eigen>
 #include "params.hpp"
 
 class LQRControl
@@ -60,6 +59,9 @@ public:
 	 * @return integer that denotes the state of execution */
 	int updateSetpoint(const Eigen::VectorXf &new_val, int start, int end);
 
+	int updateEQInput(float new_val, int index);
+	int updateEQInput(const Eigen::VectorXf &new_val, int start, int end);
+
 	/**
 	 * Calculate error vector, notice quaternion way of calculating error
 	 * @param setpoint vector */
@@ -87,5 +89,6 @@ private:
 	Eigen::MatrixXf _lqr_gain_matrix;
 	Eigen::VectorXf _state;
 	Eigen::VectorXf _setpoint;
+	Eigen::VectorXf _eq_u;
 
 };

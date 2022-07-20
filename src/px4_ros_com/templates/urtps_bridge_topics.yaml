@@ -66,3 +66,5 @@ rtps:
     receive: true
   - msg: VehicleAngularVelocity
     receive: true
+  - msg: ActuatorControls0
+    send: true

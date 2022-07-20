@@ -44,6 +44,8 @@
  */
 #include <lqr_control/LQRControl.hpp>
 
+Eigen::VectorXf EQ_INPUT = Eigen::VectorXf::Zero(LQR_PARAMS::CONTROL_VECTOR::DIM);
+
 LQRControl::LQRControl() :
 	_num_of_output(LQR_PARAMS::CONTROL_VECTOR::DIM),
 	_num_of_states(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::DIM))
@@ -51,6 +53,7 @@ LQRControl::LQRControl() :
 	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
 	_state = Eigen::VectorXf::Zero(_num_of_states);
 	_setpoint = Eigen::VectorXf::Zero(_num_of_states);
+	_eq_u = EQ_INPUT;
 }
 
 LQRControl::LQRControl(Eigen::VectorXf state):
@@ -60,6 +63,7 @@ LQRControl::LQRControl(Eigen::VectorXf state):
 {
 	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
 	_setpoint = Eigen::VectorXf::Zero(_num_of_states);
+	_eq_u = EQ_INPUT;
 }
 
 LQRControl::LQRControl(int output_num, int stat_num, Eigen::VectorXf state) :
@@ -69,6 +73,7 @@ LQRControl::LQRControl(int output_num, int stat_num, Eigen::VectorXf state) :
 {
 	_lqr_gain_matrix = Eigen::MatrixXf::Zero(_num_of_output, _num_of_states);
 	_setpoint = Eigen::VectorXf::Zero(_num_of_states);
+	_eq_u = EQ_INPUT;
 }
 
 Eigen::Vector3f LQRControl::reduceQuat(const Eigen::Quaternionf &quat_cord)
@@ -130,6 +135,33 @@ int LQRControl::updateSetpoint(const Eigen::VectorXf &new_val, int start, int en
 	}
 }
 
+int LQRControl::updateEQInput(float new_val, int index)
+{
+	if (index < 0 || index >= LQR_PARAMS::CONTROL_VECTOR::DIM){
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::INCORRECT_DIM);
+	} else {
+		_eq_u[index] = new_val;
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::SUCCESS);
+	}
+}
+
+int LQRControl::updateEQInput(const Eigen::VectorXf &new_val, int start, int end)
+{
+	if (start > end){
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::INCORRECT_DIM);
+	} else if (new_val.size() != end - start + 1){
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::INCORRECT_DIM);
+	} else if (start < 0 || start >= _num_of_states){
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::INCORRECT_DIM);
+	} else if (end < 0 || end >= _num_of_states){
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::INCORRECT_DIM);
+	} else {
+		auto index = Eigen::seq(start, end);
+		_eq_u(index) = new_val;
+		return static_cast<int>(LQR_PARAMS::EXIT_CODE::SUCCESS);
+	}
+}
+
 Eigen::VectorXf LQRControl::calculateError(const Eigen::VectorXf &setpoint)
 {
 	auto index = Eigen::seq(static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
@@ -147,7 +179,7 @@ Eigen::VectorXf LQRControl::update()
 {
 	Eigen::VectorXf error = calculateError(_setpoint);
 
-	return _lqr_gain_matrix * error;
+	return _lqr_gain_matrix * error + _eq_u;
 }
 
 Eigen::VectorXf LQRControl::returnState()
