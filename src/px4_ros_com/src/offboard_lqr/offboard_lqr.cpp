@@ -88,7 +88,7 @@ public:
 		timesync_sub_ =
 			this->create_subscription<px4_msgs::msg::Timesync>("fmu/timesync/out", 10,
 				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
-					times_tamp_.store(msg->timestamp);
+					timestamp_.store(msg->timestamp);
 				});
 
 		// update vehicle state once an update becomes available

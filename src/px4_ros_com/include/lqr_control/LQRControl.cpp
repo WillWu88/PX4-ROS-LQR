@@ -42,7 +42,7 @@
  * @copyright Copyright (c) System Theory Lab, 2022
  *
  */
-#include "LQRControl.hpp"
+#include <lqr_control/LQRControl.hpp>
 
 LQRControl::LQRControl() :
 	_num_of_output(LQR_PARAMS::CONTROL_VECTOR::DIM),

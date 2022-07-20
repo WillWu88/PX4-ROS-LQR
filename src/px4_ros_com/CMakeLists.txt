@@ -89,7 +89,7 @@ target_include_directories(frame_transforms PUBLIC
 target_link_libraries(frame_transforms Eigen3::Eigen ${geometry_msgs_LIBRARIES} ${sensor_msgs_LIBRARIES})
 
 # Add lqr_control lib
-add_library(lqr_control SHARED include/lqr_control/LQRControl.hpp include/lqr_control/LQRControl.cpp)
+add_library(lqr_control SHARED include/lqr_control/LQRControl.cpp)
 ament_target_dependencies(lqr_control Eigen3)
 target_include_directories(lqr_control PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
@@ -110,7 +110,15 @@ custom_executable(examples/listeners sensor_combined_listener)
 custom_executable(examples/listeners vehicle_gps_position_listener)
 custom_executable(examples/advertisers debug_vect_advertiser)
 custom_executable(examples/offboard offboard_control)
-custom_executable(offboard_lqr lqr_controller)
+
+# add offboard lqr
+add_executable(offboard_lqr src/offboard_lqr/offboard_lqr.cpp)
+target_link_libraries(offboard_lqr lqr_control)
+ament_target_dependencies(lqr_control
+  rclcpp
+  px4_msgs
+  )
+install(TARGETS offboard_lqr DESTINATION lib/${PROJECT_NAME})
 
 # Add LQR Gtest
 if(BUILD_TESTING)
