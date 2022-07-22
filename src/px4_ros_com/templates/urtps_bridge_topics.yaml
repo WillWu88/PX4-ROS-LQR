@@ -10,23 +10,10 @@ rtps:
     receive: true
   - msg: DebugVect
     receive: true
-  - msg: OffboardControlMode
-    receive: true
-  - msg: SensorOpticalFlow
-    receive: true
-  - msg: PositionSetpoint
-    receive: true
-  - msg: PositionSetpointTriplet
-    receive: true
   - msg: TelemetryStatus
     receive: true
-  - msg: Timesync
-    receive: true
-    send: true
   - msg: TrajectoryWaypoint
     send: true
-  - msg: VehicleCommand
-    receive: true
   - msg: VehicleControlMode
     send: true
   - msg: VehicleLocalPositionSetpoint
@@ -48,23 +35,28 @@ rtps:
   - base: VehicleTrajectoryWaypoint
     msg: VehicleTrajectoryWaypointDesired
     send: true
-  - msg: CollisionConstraints
-    send: true
   - msg: OnboardComputerStatus
-    receive: true
-  - msg: TrajectoryBezier
-    receive: true
-  - msg: VehicleTrajectoryBezier
     receive: true
   - msg: TimesyncStatus
     send: true
   - msg: SensorCombined
     send: true
-  - msg: VehicleLocalPosition
+  - msg: Timesync
     receive: true
-  - msg: VehicleAttitude
-    receive: true
-  - msg: VehicleAngularVelocity
-    receive: true
-  - msg: ActuatorControls0
     send: true
+  - msg: VehicleLocalPosition
+    send: true
+  - msg: VehicleAttitude
+    send: true
+  - msg: VehicleAngularVelocity
+    send: true
+  - msg: OffboardControlMode
+    receive: true
+  - msg: VehicleCommand
+    receive: true
+  - msg: VehicleThrustSetpoint
+    receive: true
+  - msg: VehicleTorqueSetpoint
+    receive: true
+  - msg: ActuatorControls
+    receive: true

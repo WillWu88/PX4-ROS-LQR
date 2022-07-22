@@ -47,12 +47,13 @@
 #include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <px4_msgs/msg/timesync.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
+#include <px4_msgs/msg/vehicle_thrust_setpoint.hpp>
+#include <px4_msgs/msg/vehicle_torque_setpoint.hpp>
+#include <px4_msgs/msg/actuator_controls0.hpp>
 #include <px4_msgs/msg/vehicle_control_mode.hpp>
 #include <px4_msgs/msg/vehicle_angular_velocity.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_attitude.hpp>
-#include <px4_msgs/msg/actuator_controls.hpp>
-#include <px4_msgs/msg/trajectory_setpoint.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <stdint.h>
 #include <eigen3/Eigen/Eigen>
@@ -70,32 +71,42 @@ public:
 #ifdef ROS_DEFAULT_API
 		offboard_control_mode_publisher_ =
 			this->create_publisher<px4_msgs::msg::OffboardControlMode>("fmu/offboard_control_mode/in", 10);
-		actuator_command_publisher_ =
-			this->create_publisher<px4_msgs::msg::ActuatorControls>("fmu/actuator_controls_0/in", 10);
 		vehicle_command_publisher_ =
 			this->create_publisher<px4_msgs::msg::VehicleCommand>("fmu/vehicle_command/in", 10);
+		thrust_command_publisher_ =
+			this->create_publisher<px4_msgs::msg::VehicleThrustSetpoint>("fmu/vehicle_thrust_setpoint/in", 10);
+		torque_command_publisher_ =
+			this->create_publisher<px4_msgs::msg::VehicleTorqueSetpoint>("fmu/vehicle_torque_setpoint/in", 10);
+		actuator_controls_publisher_ =
+			this->create_publisher<px4_msgs::msg::ActuatorControls0>("fmu/actuator_controls_0/in", 10);
 #else
 		offboard_control_mode_publisher_ =
 			this->create_publisher<px4_msgs::msg::OffboardControlMode>("fmu/offboard_control_mode/in");
-		actuator_command_publisher_ =
-			this->create_publisher<px4_msgs::msg::ActuatorControls0>("fmu/actuator_controls_0/in");
 		vehicle_command_publisher_ =
 			this->create_publisher<px4_msgs::msg::VehicleCommand>("fmu/vehicle_command/in");
+		thrust_command_publisher_ =
+			this->create_publisher<px4_msgs::msg::VehicleThrustSetpoint>("fmu/vehicle_thrust_setpoint/in");
+		torque_command_publisher_ =
+			this->create_publisher<px4_msgs::msg::VehicleTorqueSetpoint>("fmu/vehicle_torque_setpoint/in");
+		actuator_controls_publisher_ =
+			this->create_publisher<px4_msgs::msg::ActuatorControls0>("fmu/actuator_controls_0/in");
 #endif
 
+//#ifdef ROS_DEFAULT_API
 		// get common timestamp
 		timesync_sub_ =
 			this->create_subscription<px4_msgs::msg::Timesync>("fmu/timesync/out", 10,
 				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
 					timestamp_.store(msg->timestamp);
 				});
-
+/*
 		// update vehicle state once an update becomes available
 		vehicle_pos_vel_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
 			"fmu/vehicle_local_position/out",
 			10,
 			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
 				Eigen::VectorXf new_state;
+				std::cout << "local position received" << std::endl;
 				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
 				controller_.updateState(new_state,
 									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
@@ -132,14 +143,61 @@ public:
 									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
 									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_Z));
 			});
+#else
 
+		timesync_sub_ =
+			this->create_subscription<px4_msgs::msg::Timesync>("fmu/timesync/out",
+				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
+					timestamp_.store(msg->timestamp);
+				});
+
+		// update vehicle state once an update becomes available
+		vehicle_pos_vel_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
+			"fmu/vehicle_local_position/out",
+			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
+				Eigen::VectorXf new_state;
+				std::cout << "local position received" << std::endl;
+				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
+				controller_.updateState(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
+			});
+		vehicle_attitude_sub_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
+			"fmu/vehicle_attitude/out",
+			[this](const px4_msgs::msg::VehicleAttitude::UniquePtr msg) {
+				Eigen::Quaternionf new_state(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
+				controller_.updateState(controller_.reduceQuat(new_state),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3));
+			});
+		vehicle_angular_v_sub_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+			"fmu/vehicle_angular_velocity/out",
+			[this](const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg) {
+				Eigen::VectorXf new_state(msg->xyz.size());
+				new_state << msg->xyz[0], msg->xyz[1], msg->xyz[2];
+				controller_.updateState(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::R));
+			});
+
+        // update vehicle position setpoint, from qgroundcontrol
+        vehicle_trajectory_sub_ = this->create_subscription<px4_msgs::msg::TrajectorySetpoint>(
+			"fmu/trajectory_setpoint/out",
+			[this](const px4_msgs::msg::TrajectorySetpoint::UniquePtr msg) {
+				Eigen::VectorXf new_state(msg->position.size());
+				new_state << msg->position[0], msg->position[1], msg->position[2];
+				controller_.updateSetpoint(new_state,
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
+									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_Z));
+			});
+#endif */
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
 
 			if (offboard_setpoint_counter_ == 10) {
 				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
+				this->publish_vehicle_command(px4_msgs::msg::VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
 
 				// Arm the vehicle
 				this->arm();
@@ -164,9 +222,11 @@ private:
 	LQRControl controller_;
 	rclcpp::TimerBase::SharedPtr timer_;
 
-	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
-	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_publisher_;
-	rclcpp::Publisher<ActuatorControls>::SharedPtr actuator_command_publisher_;
+	rclcpp::Publisher<px4_msgs::msg::OffboardControlMode>::SharedPtr offboard_control_mode_publisher_;
+	rclcpp::Publisher<px4_msgs::msg::VehicleCommand>::SharedPtr vehicle_command_publisher_;
+	rclcpp::Publisher<px4_msgs::msg::VehicleThrustSetpoint>::SharedPtr thrust_command_publisher_;
+	rclcpp::Publisher<px4_msgs::msg::VehicleTorqueSetpoint>::SharedPtr torque_command_publisher_;
+	rclcpp::Publisher<px4_msgs::msg::ActuatorControls0>::SharedPtr actuator_controls_publisher_;
 
 	rclcpp::Subscription<px4_msgs::msg::Timesync>::SharedPtr timesync_sub_;
 	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr vehicle_pos_vel_sub_;
@@ -189,7 +249,7 @@ private:
  * @brief Send a command to Arm the vehicle
  */
 void OffboardLQR::arm() const {
-	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
+	publish_vehicle_command(px4_msgs::msg::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
 
 	RCLCPP_INFO(this->get_logger(), "Arm command send");
 }
@@ -198,7 +258,7 @@ void OffboardLQR::arm() const {
  * @brief Send a command to Disarm the vehicle
  */
 void OffboardLQR::disarm() const {
-	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
+	publish_vehicle_command(px4_msgs::msg::VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
 
 	RCLCPP_INFO(this->get_logger(), "Disarm command send");
 }
@@ -208,13 +268,14 @@ void OffboardLQR::disarm() const {
  *        For this example, only position and altitude controls are active.
  */
 void OffboardLQR::publish_offboard_control_mode() const {
-	OffboardControlMode msg{};
+	px4_msgs::msg::OffboardControlMode msg{};
 	msg.timestamp = timestamp_.load();
-	msg.position = true;
+	msg.position = false;
 	msg.velocity = false;
 	msg.acceleration = false;
 	msg.attitude = false;
 	msg.body_rate = false;
+	msg.actuator = true ;
 
 	offboard_control_mode_publisher_->publish(msg);
 }
@@ -225,14 +286,23 @@ void OffboardLQR::publish_offboard_control_mode() const {
  */
 void OffboardLQR::publish_control_setpoint() {
 	Eigen::VectorXf control_val = controller_.update();
-	ActuatorControls msg{}; //needs review
-	msg.timestamp = timestamp_.load();
-	msg.control[msg.INDEX_ROLL] = control_val(LQR_PARAMS::CONTROL_VECTOR::AILERON);
-	msg.control[msg.INDEX_PITCH] = control_val(LQR_PARAMS::CONTROL_VECTOR::ELEVATOR);
-	msg.control[msg.INDEX_YAW] = control_val(LQR_PARAMS::CONTROL_VECTOR::RUDDER);
-	msg.control[msg.INDEX_THROTTLE] = control_val(LQR_PARAMS::CONTROL_VECTOR::THRUST);
+	px4_msgs::msg::VehicleThrustSetpoint thrust_msg{};
+	px4_msgs::msg::VehicleTorqueSetpoint torque_msg{};
 
-	actuator_command_publisher_->publish(msg);
+	thrust_msg.timestamp = timestamp_.load();
+	torque_msg.timestamp = timestamp_.load();
+
+	thrust_msg.xyz[0] = 0;
+	thrust_msg.xyz[1] = 0;
+	thrust_msg.xyz[2] = control_val[LQR_PARAMS::CONTROL_VECTOR::THRUST];
+
+	torque_msg.xyz[0] = control_val[LQR_PARAMS::CONTROL_VECTOR::AILERON];
+	torque_msg.xyz[1] = control_val[LQR_PARAMS::CONTROL_VECTOR::ELEVATOR];
+	torque_msg.xyz[2] = control_val[LQR_PARAMS::CONTROL_VECTOR::RUDDER];
+
+	thrust_command_publisher_->publish(thrust_msg);
+	torque_command_publisher_->publish(torque_msg);
+
 }
 
 /**
@@ -243,7 +313,7 @@ void OffboardLQR::publish_control_setpoint() {
  */
 void OffboardLQR::publish_vehicle_command(uint16_t command, float param1,
 					      float param2) const {
-	VehicleCommand msg{};
+	px4_msgs::msg::VehicleCommand msg{};
 	msg.timestamp = timestamp_.load();
 	msg.param1 = param1;
 	msg.param2 = param2;
@@ -259,21 +329,37 @@ void OffboardLQR::publish_vehicle_command(uint16_t command, float param1,
 
 void OffboardLQR::publish_control_setpoint_test()
 {
-	ActuatorControls msg{}; //needs review
+	float norm_scale = 1;
+	px4_msgs::msg::VehicleThrustSetpoint thrust_msg{};
+	px4_msgs::msg::VehicleTorqueSetpoint torque_msg{};
+	px4_msgs::msg::ActuatorControls0 msg{};
+
+	thrust_msg.timestamp = timestamp_.load();
+	torque_msg.timestamp = timestamp_.load();
+
 	msg.timestamp = timestamp_.load();
 	msg.control[msg.INDEX_ROLL] = 0;
 	msg.control[msg.INDEX_PITCH] = 0;
 	msg.control[msg.INDEX_YAW] = 0;
-	msg.control[msg.INDEX_THROTTLE] = 1;
+	msg.control[msg.INDEX_THROTTLE] = -0.7;
+	thrust_msg.xyz[0] = 0;
+	thrust_msg.xyz[1] = 0;
+	thrust_msg.xyz[2] = -0.7;
 
-	actuator_command_publisher_->publish(msg);
+	torque_msg.xyz[0] = 0;
+	torque_msg.xyz[1] = 0;
+	torque_msg.xyz[2] = 0;
 
+	thrust_command_publisher_->publish(thrust_msg);
+	torque_command_publisher_->publish(torque_msg);
+	actuator_controls_publisher_->publish(msg);
 }
 
 int main(int argc, char* argv[]) {
 	std::cout << "Starting offboard control node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
+	std::cout << "publishing test controls" << std::endl;
 	rclcpp::spin(std::make_shared<OffboardLQR>());
 
 	rclcpp::shutdown();
