@@ -58,5 +58,7 @@ rtps:
     receive: true
   - msg: VehicleTorqueSetpoint
     receive: true
-  - msg: ActuatorControls
+  - msg: ActuatorControls0
+    receive: true
+  - msg: ActuatorOutputs
     receive: true
