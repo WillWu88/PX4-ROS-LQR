@@ -87,12 +87,44 @@ public:
 			"fmu/vehicle_local_position/out",
 			10,
 			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
-				Eigen::VectorXf new_state;
-				std::cout << "local position received" << std::endl;
-				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
-				controller_.updateState(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
+				if (msg == nullptr) {
+					RCLCPP_INFO(this->get_logger(), "Empty Messsage Received");
+				} else {
+					_position_velocity[0] = msg->x;
+					_position_velocity[1] = msg->y;
+					_position_velocity[2] = msg->z;
+					_position_velocity[3] = msg->vx;
+					_position_velocity[4] = msg->vy;
+					_position_velocity[5] = msg->vz;
+					update_state();
+				}
+			});
+		vehicle_attitude_sub_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
+			"fmu/vehicle_attitude/out",
+			10,
+			[this](const px4_msgs::msg::VehicleAttitude::UniquePtr msg) {
+				if (msg == nullptr){
+					RCLCPP_INFO(this->get_logger(), "Empty Messsage Received");
+				} else {
+					_attitude.w() = msg->q[0];
+					_attitude.x() = msg->q[1];
+					_attitude.y() = msg->q[2];
+					_attitude.z() = msg->q[3];
+					update_state();
+				}
+			});
+		vehicle_angular_v_sub_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
+			"fmu/vehicle_angular_velocity/out",
+			10,
+			[this](const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg) {
+				if (msg == nullptr){
+					RCLCPP_INFO(this->get_logger(), "Empty Messsage Received");
+				} else {
+					_rate[0] = msg->xyz[0];
+					_rate[1] = msg->xyz[1];
+					_rate[2] = msg->xyz[2];
+					update_state();
+				}
 			});
 #else
 		offboard_control_mode_publisher_ =
@@ -107,16 +139,6 @@ public:
 			this->create_publisher<px4_msgs::msg::ActuatorControls0>("fmu/actuator_controls_0/in");
 		actuator_outputs_publisher_ =
 			this->create_publisher<px4_msgs::msg::ActuatorOutputs>("fmu/actuator_outputs/in");
-		vehicle_pos_vel_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
-			"fmu/vehicle_local_position/out",
-			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
-				Eigen::VectorXf new_state;
-				std::cout << "local position received" << std::endl;
-				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
-				controller_.updateState(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
-			});
 #endif
 
 		// get common timestamp
@@ -126,86 +148,6 @@ public:
 					timestamp_.store(msg->timestamp);
 				});
 
-		/*
-		vehicle_attitude_sub_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
-			"fmu/vehicle_attitude/out",
-			10,
-			[this](const px4_msgs::msg::VehicleAttitude::UniquePtr msg) {
-				Eigen::Quaternionf new_state(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
-				controller_.updateState(controller_.reduceQuat(new_state),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3));
-			});
-		vehicle_angular_v_sub_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
-			"fmu/vehicle_angular_velocity/out",
-			10,
-			[this](const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg) {
-				Eigen::VectorXf new_state(msg->xyz.size());
-				new_state << msg->xyz[0], msg->xyz[1], msg->xyz[2];
-				controller_.updateState(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::R));
-			});
-
-        // update vehicle position setpoint, from qgroundcontrol
-        vehicle_trajectory_sub_ = this->create_subscription<px4_msgs::msg::TrajectorySetpoint>(
-			"fmu/trajectory_setpoint/out",
-			10,
-			[this](const px4_msgs::msg::TrajectorySetpoint::UniquePtr msg) {
-				Eigen::VectorXf new_state(msg->position.size());
-				new_state << msg->position[0], msg->position[1], msg->position[2];
-				controller_.updateSetpoint(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_Z));
-			});
-#else
-
-		timesync_sub_ =
-			this->create_subscription<px4_msgs::msg::Timesync>("fmu/timesync/out",
-				[this](const px4_msgs::msg::Timesync::UniquePtr msg) {
-					timestamp_.store(msg->timestamp);
-				});
-
-		// update vehicle state once an update becomes available
-		vehicle_pos_vel_sub_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>(
-			"fmu/vehicle_local_position/out",
-			[this](const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) {
-				Eigen::VectorXf new_state;
-				std::cout << "local position received" << std::endl;
-				new_state << msg->x, msg->y, msg->z, msg->vx, msg->vy, msg->vz;
-				controller_.updateState(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
-			});
-		vehicle_attitude_sub_ = this->create_subscription<px4_msgs::msg::VehicleAttitude>(
-			"fmu/vehicle_attitude/out",
-			[this](const px4_msgs::msg::VehicleAttitude::UniquePtr msg) {
-				Eigen::Quaternionf new_state(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
-				controller_.updateState(controller_.reduceQuat(new_state),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3));
-			});
-		vehicle_angular_v_sub_ = this->create_subscription<px4_msgs::msg::VehicleAngularVelocity>(
-			"fmu/vehicle_angular_velocity/out",
-			[this](const px4_msgs::msg::VehicleAngularVelocity::UniquePtr msg) {
-				Eigen::VectorXf new_state(msg->xyz.size());
-				new_state << msg->xyz[0], msg->xyz[1], msg->xyz[2];
-				controller_.updateState(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::R));
-			});
-
-        // update vehicle position setpoint, from qgroundcontrol
-        vehicle_trajectory_sub_ = this->create_subscription<px4_msgs::msg::TrajectorySetpoint>(
-			"fmu/trajectory_setpoint/out",
-			[this](const px4_msgs::msg::TrajectorySetpoint::UniquePtr msg) {
-				Eigen::VectorXf new_state(msg->position.size());
-				new_state << msg->position[0], msg->position[1], msg->position[2];
-				controller_.updateSetpoint(new_state,
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
-									   static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_Z));
-			});
-#endif */
 		offboard_setpoint_counter_ = 0;
 
 		auto timer_callback = [this]() -> void {
@@ -218,9 +160,8 @@ public:
 				this->arm();
 			}
 
-            		// offboard_control_mode needs to be paired with trajectory_setpoint
+            // offboard_control_mode needs to be paired with trajectory_setpoint
 			publish_offboard_control_mode();
-			//publish_control_setpoint_test();
 			publish_outputs_test();
 
            		 // stop the counter after reaching 11
@@ -261,6 +202,13 @@ private:
 	void publish_control_setpoint();
 	void publish_control_setpoint_test();
 	void publish_outputs_test();
+	// void message_received();
+	Eigen::Vector<float, 6> _position_velocity;
+	Eigen::Quaternionf _attitude;
+	Eigen::Vector3f _rate;
+
+	void update_state();
+
 };
 
 /**
@@ -388,6 +336,34 @@ void OffboardLQR::publish_outputs_test()
 	pwm_message.output[5] = 1500;
 
 	actuator_outputs_publisher_->publish(pwm_message);
+}
+
+void OffboardLQR::update_state()
+{
+	int status = controller_.updateState(_rate,
+							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
+							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::R));
+	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
+	{
+		RCLCPP_INFO(this->get_logger(), "State update error");
+		return ;
+	}
+	status = controller_.updateState(_position_velocity,
+										 static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
+										 static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::V_Z));
+	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
+	{
+		RCLCPP_INFO(this->get_logger(), "State update error");
+		return ;
+	}
+	controller_.updateState(controller_.reduceQuat(_attitude),
+							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
+							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_3));
+	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
+	{
+		RCLCPP_INFO(this->get_logger(), "State update error");
+		return ;
+	}
 }
 int main(int argc, char* argv[]) {
 	std::cout << "Starting offboard control node..." << std::endl;
