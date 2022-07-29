@@ -207,7 +207,7 @@ private:
 	Eigen::Quaternionf _attitude;
 	Eigen::Vector3f _rate;
 
-	void update_state();
+	int update_state();
 
 };
 
@@ -241,7 +241,7 @@ void OffboardLQR::publish_offboard_control_mode() const {
 	msg.acceleration = false;
 	msg.attitude = false;
 	msg.body_rate = false;
-	msg.actuator = true ;
+	msg.actuator = true;
 
 	offboard_control_mode_publisher_->publish(msg);
 }
@@ -334,11 +334,12 @@ void OffboardLQR::publish_outputs_test()
 	pwm_message.output[3] = 1750;
 	pwm_message.output[4] = 1500;
 	pwm_message.output[5] = 1500;
+	pwm_message.output[8] = 8;
 
 	actuator_outputs_publisher_->publish(pwm_message);
 }
 
-void OffboardLQR::update_state()
+int OffboardLQR::update_state()
 {
 	int status = controller_.updateState(_rate,
 							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P),
@@ -346,7 +347,7 @@ void OffboardLQR::update_state()
 	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
 	{
 		RCLCPP_INFO(this->get_logger(), "State update error");
-		return ;
+		return status;
 	}
 	status = controller_.updateState(_position_velocity,
 										 static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::P_X),
@@ -354,7 +355,7 @@ void OffboardLQR::update_state()
 	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
 	{
 		RCLCPP_INFO(this->get_logger(), "State update error");
-		return ;
+		return status;
 	}
 	controller_.updateState(controller_.reduceQuat(_attitude),
 							static_cast<int>(LQR_PARAMS::STATE_VECTOR_QUAT::Q_1),
@@ -362,8 +363,9 @@ void OffboardLQR::update_state()
 	if (status != LQR_PARAMS::EXIT_CODE::SUCCESS)
 	{
 		RCLCPP_INFO(this->get_logger(), "State update error");
-		return ;
+		return status;
 	}
+	return LQR_PARAMS::EXIT_CODE::SUCCESS;
 }
 int main(int argc, char* argv[]) {
 	std::cout << "Starting offboard control node..." << std::endl;
